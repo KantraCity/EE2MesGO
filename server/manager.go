@@ -10,11 +10,12 @@ import (
 )
 
 const (
-	WorkerCount     = 8
-	TaskQueueSize   = 512
-	SessionTimeOut  = 30 * time.Second
-	CleanupInterval = 30 * time.Second
-	PollQueueSize   = 64
+	WorkerCount        = 8
+	TaskQueueSize      = 512
+	SessionTimeOut     = 10 * time.Second
+	HardSessionTimeout = 5 * time.Minute
+	CleanupInterval    = 10 * time.Second
+	PollQueueSize      = 64
 )
 
 // Коды как в c++
@@ -226,6 +227,7 @@ func (m *Manager) cleanupLoop() {
 	for range ticker.C {
 		m.cleanup()
 	}
+
 }
 
 func (m *Manager) cleanup() {
@@ -236,7 +238,7 @@ func (m *Manager) cleanup() {
 
 	for id, s := range m.sessions {
 		s.mu.Lock()
-		inactive := now.Sub(s.LastActive) > SessionTimeOut
+		inactive := (now.Sub(s.LastActive) > SessionTimeOut && len(s.OutQueue) == 0) || now.Sub(s.LastActive) > HardSessionTimeout
 		s.mu.Unlock()
 
 		if inactive {
@@ -249,7 +251,6 @@ func (m *Manager) cleanup() {
 }
 
 func clientWebSocketActivity(mgr *Manager, sessionID string, conn *websocket.Conn) {
-	defer mgr.RemoveSession(sessionID)
 
 	for {
 		_, msg, err := conn.ReadMessage()
